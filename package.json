@@ -1,0 +1,16 @@
+{
+  "name": "techmarkets-backend",
+  "version": "0.1.0",
+  "description": "A comprehensive backend implementation for TechMarkets, a cryptocurrency-denominated marketplace for electronic devices with depreciation tracking. Built on Supabase with multi-method authentication including wallet-based sign-in.",
+  "main": "index.js",
+  "scripts": {
+    "sb:start": "supabase start",
+    "sb:stop": "supabase stop",
+    "sb:status": "supabase status"
+  },
+  "author": "Greenfire <Hello@greenfire.io>",
+  "license": "ISC",
+  "devDependencies": {
+    "supabase": "^2.31.4"
+  }
+}
