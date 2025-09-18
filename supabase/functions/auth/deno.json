@@ -1,7 +1,7 @@
 {
   "imports": {
     "@supabase/supabase-js": "jsr:@supabase/supabase-js@^2",
-    "express": "npm:express@5.1.0",
+    "crypto": "node:crypto",
     "zod": "npm:zod@^3.24.2"
   }
 }

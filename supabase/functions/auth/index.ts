@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { createMessagePayload, verify } from './@siwt/sdk/index.esm.js'
+import crypto from 'crypto'
 import { z } from 'zod'
-import express from 'express'
-
-console.log('Auth function up and running!')
+import { corsHeaders } from '../_shared/cors.ts'
 
 interface SiwtMessage {
   domain: string;
@@ -26,7 +25,8 @@ interface ResponseData {
 }
 
 interface ChallengeResponseData extends ResponseData {
-  payload: string;
+  message: string;
+  nonce: string;
 }
 
 interface AuthResponseData extends ResponseData {
@@ -55,112 +55,228 @@ const siwtRequestSchema = z.object({
   existingUserId: z.string().optional(),
 })
 
-const app = express()
-app.use(express.json())
+console.log('Auth function up and running!')
 
-const port = 3000
-
-// Generate a message to sign for authentication
-app.post('/auth/challenge', handleChallenge)
-
-// Authenticate an account using Tezos
-app.post('/auth/wallet', handleAuthenticateWallet)
-
-// Link a Tezos account to an existing user
-app.post('/auth/link-wallet')
-
-// Verify seller requirements
-app.post('/auth/verify-seller')
-
-// Get user profile
-app.get('/auth/profile')
-
-async function handleChallenge(req, res) {
-  const body = req.body
-  if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
-    return res.status(400).json({ success: false, error: 'Invalid JSON body' } as ResponseData)
+Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
-  const expectedDomain = Deno.env.get('ALLOWED_DOMAIN') || 'techmarkets.io'
+
+  const url = new URL(req.url)
+  const path = url.pathname
+  const method = req.method
+
+  try {
+    // Route handling
+    if (path.startsWith('/auth/challenge/') && method === 'GET') {
+      return await handleChallenge(req)
+    } else if (path === '/auth/wallet' && method === 'POST') {
+      return await handleAuthenticateWallet(req)
+    } else if (path === '/auth/link-wallet' && method === 'POST') {
+      return new Response(JSON.stringify({ success: false, error: 'Not implemented' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 501
+      })
+    } else if (path === '/auth/verify-seller' && method === 'POST') {
+      return new Response(JSON.stringify({ success: false, error: 'Not implemented' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 501
+      })
+    } else if (path === '/auth/profile' && method === 'GET') {
+      return new Response(JSON.stringify({ success: false, error: 'Not implemented' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 501
+      })
+    } else {
+      return new Response(JSON.stringify({ success: false, error: 'Not found' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 404
+      })
+    }
+  } catch (error) {
+    console.error('Function error:', error)
+    return new Response(JSON.stringify({ success: false, error: 'Internal server error' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
+  }
+})
+
+async function handleChallenge(req: Request) {
+  const url = new URL(req.url)
+  const path = url.pathname
+  const hostname = url.hostname
+
+  // Extract address from URL path: /auth/challenge/{address}
+  const pathParts = path.split('/')
+  const address = pathParts[pathParts.length - 1] // Get the last part of the path
+
+  if (!address || address === 'challenge') {
+    return new Response(JSON.stringify({ success: false, error: 'Address parameter is required in URL path' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400
+    })
+  }
+
+  // Generate nonce
+  const nonce = crypto.randomBytes(32).toString('base64url')
+  const issuedAt = new Date().toISOString()
+  const expirationTime = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 min
+
+  // Store nonce in database
+  const authorizationHeader = req.headers.get('Authorization')!
+  const supabase = getSupabaseClient(authorizationHeader)
+
+  try {
+    await supabase.from('siwt_nonces').insert([
+      {
+        nonce, 
+        address, 
+        expires_at: expirationTime
+      }
+    ])
+  } catch (error) {
+    console.error('Error storing nonce:', error)
+    return new Response(JSON.stringify({ success: false, error: 'Failed to store nonce' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
+  }
+
+  const messagePayload = createMessagePayload({
+    domain: 'TechMarkets.io',
+    address: address,
+    statement: 'Sign in to TechMarkets with your Tezos wallet',
+    uri: hostname,
+    version: '1',
+    chainId: 'NetXdQprcVkpaWU', // Tezos mainnet
+    nonce,
+    issuedAt,
+    expirationTime
+  })
+  
+  console.log('Challenge message generated: ', messagePayload)
+  
+  return new Response(JSON.stringify({
+    success: true,
+    message: messagePayload,
+    nonce
+  } as ChallengeResponseData), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status: 200
+  })
 }
 
-async function handleAuthenticateWallet(req, res) {
-  const body = req.body
-      if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
-        return res.status(400).json({ success: false, error: 'Invalid JSON body' } as ResponseData)
-      }
+async function handleAuthenticateWallet(req: Request) {
+  let body
+  try {
+    body = await req.json()
+  } catch (error) {
+    return new Response(JSON.stringify({ success: false, error: 'Invalid JSON body' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400
+    })
+  }
 
-      const parsed = siwtRequestSchema.safeParse(body)
-      if (!parsed.success) {
-        return res.status(400).json({ success: false, error: 'Validation failed' } as ResponseData)
-      }
+  if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
+    return new Response(JSON.stringify({ success: false, error: 'Invalid JSON body' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400
+    })
+  }
 
-      const requestBody = parsed.data
-      const { message, signature, address } = requestBody
+  const parsed = siwtRequestSchema.safeParse(body)
+  if (!parsed.success) {
+    return new Response(JSON.stringify({ success: false, error: 'Validation failed' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400
+    })
+  }
 
-      // Validate domain
-      const expectedDomain = Deno.env.get('ALLOWED_DOMAIN') || 'techmarkets.io'
-      if (message.domain !== expectedDomain) {
-        return res.status(401).json({
-          success: false,
-          error: `Invalid domain. Expected: ${expectedDomain}, Got: ${message.domain}`,
-        } as ResponseData)
-      }
+  const requestBody = parsed.data
+  const { message, signature, address } = requestBody
 
-      // Initialize Supabase client
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  // Validate domain
+  const expectedDomain = Deno.env.get('ALLOWED_DOMAIN') || 'techmarkets.io'
+  if (message.domain !== expectedDomain) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Invalid domain. Expected: ${expectedDomain}, Got: ${message.domain}`,
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401
+    })
+  }
 
-      // Validate nonce (prevent replay attacks)
-      const nonceValidation = await validateNonce(supabase, message.nonce, address)
-      if (!nonceValidation.valid) {
-        return res.status(401).json({
-          success: false,
-          error: nonceValidation.error || 'Invalid nonce',
-        } as ResponseData)
-      }
+  const authorizationHeader = req.headers.get('Authorization')!
+  const supabase = getSupabaseClient(authorizationHeader)
 
-      // Format and verify message
-      const messageString = formatMessage(message)
-      try {
-        const isValid = verify(messageString, address, signature, message.domain, message.nonce)
-        if (!isValid) {
-          return res.status(401).json({ success: false, error: 'Invalid signature' } as ResponseData)
-        }
-      } catch (verificationError) {
-        console.error('Signature verification error:', verificationError)
-        return res.status(401).json({ success: false, error: 'Signature verification failed' } as ResponseData)
-      }
+  // Validate nonce (prevent replay attacks)
+  const nonceValidation = await validateNonce(supabase, message.nonce, address)
+  if (!nonceValidation.valid) {
+    return new Response(JSON.stringify({
+      success: false,
+      error: nonceValidation.error || 'Invalid nonce',
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401
+    })
+  }
 
-      // Get or create user
-      let user = await getUserByAddress(supabase, address)
-      if (!user) {
-        if (requestBody.linkToExistingUser && requestBody.existingUserId) {
-          user = await linkToExistingUser(supabase, address, requestBody.existingUserId, message)
-        } else {
-          user = await createUser(supabase, address, message)
-        }
-      }
-
-      // Create a session for the user
-      const { data: sessionData, error: sessionError } = await supabase.auth.admin.createSession({
-        user_id: user.id,
+  // Format and verify message
+  const messageString = formatMessage(message)
+  try {
+    const isValid = verify(messageString, address, signature, message.domain, message.nonce)
+    if (!isValid) {
+      return new Response(JSON.stringify({ success: false, error: 'Invalid signature' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401
       })
+    }
+  } catch (verificationError) {
+    console.error('Signature verification error:', verificationError)
+    return new Response(JSON.stringify({ success: false, error: 'Signature verification failed' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401
+    })
+  }
 
-      if (sessionError) {
-        console.error('Session creation error:', sessionError)
-        return res.status(500).json({ success: false, error: 'Failed to create session' } as ResponseData)
-      }
+  // Get or create user
+  let user = await getUserByAddress(supabase, address)
+  if (!user) {
+    if (requestBody.linkToExistingUser && requestBody.existingUserId) {
+      user = await linkToExistingUser(supabase, address, requestBody.existingUserId, message)
+    } else {
+      user = await createUser(supabase, address, message)
+    }
+  }
 
-      return res.json({
-        success: true,
-        user: {
-          id: user.id,
-          address: user.address,
-          email: user.email,
-          session: sessionData.session,
-        },
-      } as ResponseData)
+  // Create a session for the user
+  const { data: sessionData, error: sessionError } = await supabase.auth.admin.createSession({
+    user_id: user.id,
+  })
+
+  if (sessionError) {
+    console.error('Session creation error:', sessionError)
+    return new Response(JSON.stringify({ success: false, error: 'Failed to create session' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500
+    })
+  }
+
+  return new Response(JSON.stringify({
+    success: true,
+    user: {
+      id: user.id,
+      address: user.address,
+      email: user.email,
+      session: sessionData.session,
+    },
+  }), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status: 200
+  })
 }
 
 function formatMessage(message: SiwtMessage): string {
@@ -380,4 +496,16 @@ async function validateNonce(supabase: any, nonce: string, address: string) {
       error: 'Nonce validation failed'
     }
   }
+}
+
+function getSupabaseClient(authorizationHeader: any) {
+  // Initialize Supabase client
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    global: {
+      headers: { Authorization: authorizationHeader }
+    }
+  })
+  return supabase
 }
