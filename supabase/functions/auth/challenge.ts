@@ -32,15 +32,21 @@ export async function handleChallenge(req: Request) {
   // Store nonce in database
   const authorizationHeader = req.headers.get('Authorization')!
   const supabase = getClient(authorizationHeader)
-
   try {
-    await supabase.from('siwt_nonces').insert([
+    const { error } = await supabase.from('siwt_nonces').insert(
       {
         nonce, 
         address, 
         expires_at: expirationTime
       }
-    ])
+    )
+
+    if (error) {
+      return new Response(JSON.stringify({ success: false, error: 'Failed to store nonce' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      })
+    }
   } catch (error) {
     console.error('Error storing nonce:', error)
     return new Response(JSON.stringify({ success: false, error: 'Failed to store nonce' }), {
@@ -64,10 +70,6 @@ export async function handleChallenge(req: Request) {
     expirationTime
   }
   const messagePayload = createMessagePayload(messageParams)
-  
-  // Dev only log
-  // REMOVE BEFORE PUSHING TO PRODUCTION
-  console.log('Challenge message generated: ', { messageParams, messagePayload })
   
   return new Response(JSON.stringify({
     success: true,
