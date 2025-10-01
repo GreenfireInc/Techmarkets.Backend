@@ -53,6 +53,18 @@ $$ LANGUAGE plpgsql;
 -- Add RLS policies
 ALTER TABLE siwt_nonces ENABLE ROW LEVEL SECURITY;
 
--- Only allow service role to access nonces table
-CREATE POLICY "Service role can manage nonces" ON siwt_nonces
-  FOR ALL USING (auth.role() = 'service_role');
+-- Allow anonymous users to insert nonces (for login challenges)
+CREATE POLICY "Anyone can create nonces" ON siwt_nonces
+  FOR INSERT WITH CHECK (true);
+
+-- Allow anonymous users to read their own nonces (for verification)
+CREATE POLICY "Anyone can read nonces" ON siwt_nonces
+  FOR SELECT USING (true);
+
+-- Allow anonymous users to update nonces (marking as used)
+CREATE POLICY "Anyone can update nonces" ON siwt_nonces
+  FOR UPDATE USING (true);
+
+-- Only service role can delete (or allow cleanup via function)
+CREATE POLICY "Service role can delete nonces" ON siwt_nonces
+  FOR DELETE USING (auth.role() = 'service_role');
