@@ -1,4 +1,3 @@
-import { verify } from './@siwt/sdk/index.esm.js'
 import { corsHeaders } from '../_shared/cors.ts'
 import { handleChallenge } from './challenge.ts'
 import { handleAuthenticateWallet } from './wallet.ts'

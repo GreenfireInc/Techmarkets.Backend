@@ -1,6 +1,7 @@
 import { getClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify } from './@siwt/sdk/index.esm.js'
+import { sign as signJWT } from 'jsonwebtoken'
 
 export async function handleAuthenticateWallet(req: Request) {
   let body
@@ -57,6 +58,21 @@ export async function handleAuthenticateWallet(req: Request) {
   let profile = await getProfileByWalletAddress(supabase, address)
   if (!profile) {
     // Return newUserResponse
+    const temporaryToken = await generateTemporaryToken(address)
+    const newUserResponse = {
+      success: true,
+      user_exists: false,
+      data: {
+        type: 'new_user',
+        wallet_address: address,
+        temporary_token: temporaryToken,
+        expires_at: Date.now() + 15 * 60 * 1000, // 15 minutes from now
+      }
+    }
+    return new Response(JSON.stringify(newUserResponse), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200
+    })
   }
 
   // Return existingUserResponse
@@ -170,18 +186,33 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
 
 
 async function getProfileByWalletAddress(supabase: any, address: string) {
-  // TODO: Implement this for existing users
-  const { data: existingUser, error } = await supabase
+  const { data: existingProfile, error } = await supabase
     .from('profiles')
     .select('*')
     .eq('wallet_address', address)
-    .single()
 
   if (error) {
     console.error('Error getting profile by address:', error)
     throw error
   }
 
-  console.log('getProfileByWalletAddress: ', address, '\nfound: ', existingUser)
-  return existingUser
+  return existingProfile[0]
+}
+
+async function generateTemporaryToken(address: string) {
+  // Construct payload for JWT
+  const payload = {
+    wallet_address: address
+  }
+  
+  const secret = Deno.env.get('JWT_SECRET')
+  const options = {
+    algorithm: 'HS256',
+    expiresIn: 600, // 10 minutes (600 seconds)
+    issuer: 'TechMarkets',
+    subject: 'temp_signup_token'
+  }
+
+  const token = signJWT(payload, secret, options)
+  return token
 }
