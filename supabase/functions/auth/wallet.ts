@@ -1,9 +1,48 @@
+/**
+ * Wallet Authentication Handler
+ * 
+ * This module handles the verification of signed challenges from Tezos wallets
+ * and manages the authentication flow for both new and existing users.
+ * 
+ * The authentication process follows this flow:
+ * 1. Client submits signed challenge with wallet address, public key, and signature
+ * 2. Server validates the nonce to prevent replay attacks
+ * 3. Server verifies the cryptographic signature using the SIWT SDK
+ * 4. Server checks if user exists in the database
+ * 5. Returns appropriate response (new user temp token or existing user session)
+ * 
+ * Security Features:
+ * - Nonce validation prevents replay attacks
+ * - Cryptographic signature verification ensures authenticity
+ * - Temporary tokens for new user onboarding
+ * - Proper error handling and logging
+ */
+
 import { getClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify } from './@siwt/sdk/index.esm.js'
 import { sign as signJWT } from 'jsonwebtoken'
 
+/**
+ * Handles wallet authentication by verifying signed challenges.
+ * 
+ * @param req - HTTP request containing signed challenge data
+ * @returns HTTP response with authentication result
+ * 
+ * Request Body:
+ * {
+ *   address: string,      // Tezos wallet address
+ *   challenge: object,    // Challenge object from /auth/challenge endpoint
+ *   pubkey: string,       // Public key of the wallet
+ *   signature: string     // Signature of the challenge message
+ * }
+ * 
+ * Response:
+ * - New user: Temporary token for account creation
+ * - Existing user: Authentication tokens and profile data (TODO)
+ */
 export async function handleAuthenticateWallet(req: Request) {
+  // Parse and validate request body
   let body
   try {
     body = await req.json()
@@ -14,6 +53,7 @@ export async function handleAuthenticateWallet(req: Request) {
     })
   }
 
+  // Ensure body exists and is not empty
   if (!body || (typeof body === 'object' && Object.keys(body).length === 0)) {
     return new Response(JSON.stringify({ success: false, error: 'Invalid JSON body' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -21,14 +61,19 @@ export async function handleAuthenticateWallet(req: Request) {
     })
   }
 
+  // Extract authentication data from request body
   const { address, challenge, pubkey, signature } = body
   const messagePayload = challenge.message.payload
   
+  // Get nonce from challenge for validation
   const nonce = challenge.nonce
+  
+  // Initialize Supabase client with authorization header
   const authorizationHeader = req.headers.get('Authorization')!
   const supabase = getClient(authorizationHeader)
   
-  // Validate nonce before proceeding with authentication
+  // Validate nonce to prevent replay attacks
+  // This ensures the challenge hasn't been used before and isn't expired
   const nonceValidation = await validateNonce(supabase, address, nonce)
   if (!nonceValidation.success) {
     return new Response(JSON.stringify(nonceValidation), {
@@ -37,6 +82,8 @@ export async function handleAuthenticateWallet(req: Request) {
     })
   }
   
+  // Verify the cryptographic signature using SIWT SDK
+  // This ensures the message was actually signed by the wallet owner
   try {
     const expectedDomain = 'TechMarkets'
     const isValid = verify(messagePayload, pubkey, signature, expectedDomain, nonce)
@@ -54,10 +101,10 @@ export async function handleAuthenticateWallet(req: Request) {
     })
   }
 
-  // Check if user exists
+  // Check if user already exists in the database
   let profile = await getProfileByWalletAddress(supabase, address)
   if (!profile) {
-    // Return newUserResponse
+    // New user flow: Generate temporary token for account creation
     const temporaryToken = await generateTemporaryToken(address)
     const newUserResponse = {
       success: true,
@@ -114,6 +161,14 @@ export async function handleAuthenticateWallet(req: Request) {
   // }
 }
 
+/**
+ * Validates a nonce to prevent replay attacks and ensure challenge freshness.
+ * 
+ * @param supabase - Supabase client instance
+ * @param address - Wallet address associated with the nonce
+ * @param providedNonce - Nonce value to validate
+ * @returns Validation result with success status and error message if failed
+ */
 async function validateNonce(supabase: any, address: string, providedNonce: string) {
   try {
     const { data: nonce, error } = await supabase
@@ -185,6 +240,13 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
 }
 
 
+/**
+ * Retrieves a user profile by wallet address.
+ * 
+ * @param supabase - Supabase client instance
+ * @param address - Wallet address to search for
+ * @returns User profile object or null if not found
+ */
 async function getProfileByWalletAddress(supabase: any, address: string) {
   const { data: existingProfile, error } = await supabase
     .from('profiles')
@@ -199,12 +261,20 @@ async function getProfileByWalletAddress(supabase: any, address: string) {
   return existingProfile[0]
 }
 
+/**
+ * Generates a temporary JWT token for new user account creation.
+ * This token allows new users to complete their profile setup.
+ * 
+ * @param address - Wallet address to include in the token
+ * @returns JWT token string with 10-minute expiration
+ */
 async function generateTemporaryToken(address: string) {
-  // Construct payload for JWT
+  // Construct JWT payload with wallet address
   const payload = {
     wallet_address: address
   }
   
+  // Get JWT secret from environment variables
   const secret = Deno.env.get('JWT_SECRET')
   const options = {
     algorithm: 'HS256',
@@ -213,6 +283,7 @@ async function generateTemporaryToken(address: string) {
     subject: 'temp_signup_token'
   }
 
+  // Sign and return the JWT token
   const token = signJWT(payload, secret, options)
   return token
 }
