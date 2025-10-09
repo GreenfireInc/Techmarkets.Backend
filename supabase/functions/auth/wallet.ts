@@ -22,6 +22,7 @@ import { getClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify } from './@siwt/sdk/index.esm.js'
 import { sign as signJWT } from 'jsonwebtoken'
+import { AuthResponseData, NewSiwtUserData } from './types/index'
 
 /**
  * Handles wallet authentication by verifying signed challenges.
@@ -106,15 +107,14 @@ export async function handleAuthenticateWallet(req: Request) {
   if (!profile) {
     // New user flow: Generate temporary token for account creation
     const temporaryToken = await generateTemporaryToken(address)
-    const newUserResponse = {
+    const newUserResponse: AuthResponseData = {
       success: true,
       user_exists: false,
       data: {
-        type: 'new_user',
-        wallet_address: address,
+        type: 'new_siwt_user',
         temporary_token: temporaryToken,
         expires_at: Date.now() + 15 * 60 * 1000, // 15 minutes from now
-      }
+      } as NewSiwtUserData
     }
     return new Response(JSON.stringify(newUserResponse), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

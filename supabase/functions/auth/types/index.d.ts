@@ -48,7 +48,7 @@ export interface AuthResponseData extends ResponseData {
   /** Whether the user already exists in the system */
   user_exists: boolean;
   /** Authentication data specific to user type */
-  data: ExistingUserData | NewUserData;
+  data: ExistingUserData | NewSiwtUserData;
 }
 
 /**
@@ -86,11 +86,9 @@ interface ExistingUserData {
  * Authentication data for new users
  * Returned when user doesn't have an account yet
  */
-interface NewUserData {
+interface NewSiwtUserData {
   /** Type identifier for new user flow */
-  type: 'new_user';
-  /** Tezos wallet address */
-  wallet_address: string;
+  type: 'new_siwt_user';
   /** Short-lived token for account creation flow */
   temporary_token: string;
   /** Unix timestamp when temporary token expires */

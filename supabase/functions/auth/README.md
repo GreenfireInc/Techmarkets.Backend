@@ -71,8 +71,7 @@ Verifies the signed challenge and authenticates the user.
   "success": true,
   "user_exists": false,
   "data": {
-    "type": "new_user",
-    "wallet_address": "tz1abc123...",
+    "type": "new_siwt_user",
     "temporary_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "expires_at": 1704067200000
   }
