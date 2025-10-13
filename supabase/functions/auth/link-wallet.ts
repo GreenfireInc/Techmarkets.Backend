@@ -2,7 +2,47 @@ import { getServiceRoleClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify as verifyJWT } from 'jsonwebtoken'
 
-export async function linkWallet(req: Request) {
+type LinkWalletRequest = {
+  uid: string;
+  temporary_token: string;
+};
+
+/**
+ * Links an authenticated wallet to an existing user account.
+ * 
+ * This endpoint allows users to associate a wallet address with their existing account.
+ * It verifies a temporary JWT token containing the wallet address and updates the user's metadata
+ * in Supabase Auth with the new wallet address.
+ * 
+ * @param {Request} req - The incoming HTTP request containing:
+ *   - `uid`: The user's unique identifier in Supabase Auth
+ *   - `temporary_token`: A JWT containing the wallet address to be linked
+ * 
+ * @returns {Promise<Response>} A response with:
+ *   - Success: { success: true, data: updatedUser } with 200 status
+ *   - Error: { success: false, error: string } with appropriate status code
+ * 
+ * @example
+ * // Request
+ * POST /auth/link-wallet
+ * {
+ *   "uid": "user-123",
+ *   "temporary_token": "jwt.token.here"
+ * }
+ * 
+ * // Success Response
+ * {
+ *   "success": true,
+ *   "data": {  updated user object  }
+ * }
+ * 
+ * // Error Response
+ * {
+ *   "success": false,
+ *   "error": "Error message"
+ * }
+ */
+export async function linkWallet(req: Request): Promise<Response> {
 	let body
 	try {
 		body = await req.json()

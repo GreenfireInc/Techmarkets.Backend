@@ -102,6 +102,43 @@ Verifies the signed challenge and authenticates the user.
 }
 ```
 
+### POST /auth/link-wallet
+Links an additional wallet address to an existing user account. This endpoint requires a valid temporary token obtained during the wallet authentication flow.
+
+**Request**:
+```json
+{
+  "uid": "user-uuid-here",
+  "temporary_token": "jwt.token.here"
+}
+```
+
+**Success Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "user-uuid-here",
+    "user_metadata": {
+      "wallet_address": "tz1newaddress..."
+    }
+  }
+}
+```
+
+**Error Response**:
+```json
+{
+  "success": false,
+  "error": "Error message describing the issue"
+}
+```
+
+**Possible Error Codes**:
+- `400 Bad Request`: Invalid request body or missing required fields
+- `401 Unauthorized`: Invalid or expired temporary token
+- `500 Internal Server Error`: Server error during wallet linking
+
 ## Security Features
 
 ### Nonce-Based Challenge System
