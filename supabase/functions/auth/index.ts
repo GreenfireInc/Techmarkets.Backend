@@ -27,6 +27,7 @@
 import { corsHeaders } from '../_shared/cors.ts'
 import { handleChallenge } from './challenge.ts'
 import { handleAuthenticateWallet } from './wallet.ts'
+import { linkWallet } from './link-wallet.ts'
 
 console.log('Auth function up and running!')
 
@@ -65,10 +66,7 @@ Deno.serve(async (req) => {
     // Links an additional wallet to an existing user account
     // TODO: Implement wallet linking functionality
     } else if (path === '/auth/link-wallet' && method === 'POST') {
-      return new Response(JSON.stringify({ success: false, error: 'Not implemented' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 501
-      })
+      return await linkWallet(req)
 
     // Route: POST /auth/verify-seller
     // Verifies and grants seller status to a user

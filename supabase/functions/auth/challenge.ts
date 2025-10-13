@@ -68,8 +68,10 @@ export async function handleChallenge(req: Request) {
   const expirationTime = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
 
   // Initialize Supabase client and store nonce in database
-  const authorizationHeader = req.headers.get('Authorization')!
-  const supabase = getClient(authorizationHeader)
+  const authHeader = req.headers.get('Authorization')!
+  const token = authHeader.replace('Bearer ', '')
+  const supabase = getClient(token)
+
   // Store nonce in database to prevent replay attacks
   try {
     const { error } = await supabase.from('siwt_nonces').insert(
@@ -81,6 +83,7 @@ export async function handleChallenge(req: Request) {
     )
 
     if (error) {
+      console.error('Error storing nonce:', error)
       return new Response(JSON.stringify({ success: false, error: 'Failed to store nonce' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500

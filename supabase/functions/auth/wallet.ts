@@ -22,7 +22,7 @@ import { getClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify } from './@siwt/sdk/index.esm.js'
 import { sign as signJWT } from 'jsonwebtoken'
-import { AuthResponseData, NewSiwtUserData } from './types/index'
+import { AuthResponseData, NewSiwtUserData } from './types/index.d.ts'
 
 /**
  * Handles wallet authentication by verifying signed challenges.
@@ -70,8 +70,9 @@ export async function handleAuthenticateWallet(req: Request) {
   const nonce = challenge.nonce
   
   // Initialize Supabase client with authorization header
-  const authorizationHeader = req.headers.get('Authorization')!
-  const supabase = getClient(authorizationHeader)
+  const authHeader = req.headers.get('Authorization')!
+  const token = authHeader.replace('Bearer ', '')
+  const supabase = getClient(token)
   
   // Validate nonce to prevent replay attacks
   // This ensures the challenge hasn't been used before and isn't expired
@@ -179,7 +180,7 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
       .single()
 
     if (error || !nonce) {
-      console.log('Nonce not found:', error)
+      console.error('Nonce not found:', error)
       return {
         success: false,
         error: 'Invalid nonce provided'
@@ -195,7 +196,7 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
     const isUsed = nonce.used_at !== null
 
     if (isExpired) {
-      console.log('Nonce is expired')
+      console.error('Nonce is expired')
       return {
         success: false,
         error: 'Nonce has expired'
@@ -203,7 +204,7 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
     }
 
     if (isUsed) {
-      console.log('Nonce has already been used')
+      console.error('Nonce has already been used')
       return {
         success: false,
         error: 'Nonce has already been used'
