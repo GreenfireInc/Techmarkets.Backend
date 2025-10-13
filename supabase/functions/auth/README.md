@@ -103,7 +103,7 @@ Verifies the signed challenge and authenticates the user.
 ```
 
 ### POST /auth/link-wallet
-Links an additional wallet address to an existing user account. This endpoint requires a valid temporary token obtained during the wallet authentication flow.
+Links a wallet address to an existing user account. This endpoint requires a valid temporary token obtained during the wallet authentication flow.
 
 **Request**:
 ```json
