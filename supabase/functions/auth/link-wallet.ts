@@ -1,9 +1,8 @@
-import { getServiceRoleClient } from '../_shared/supabase.ts'
+import { getClient, getServiceRoleClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify as verifyJWT } from 'jsonwebtoken'
 
 type LinkWalletRequest = {
-  uid: string;
   temporary_token: string;
 };
 
@@ -15,7 +14,6 @@ type LinkWalletRequest = {
  * in Supabase Auth with the new wallet address.
  * 
  * @param {Request} req - The incoming HTTP request containing:
- *   - `uid`: The user's unique identifier in Supabase Auth
  *   - `temporary_token`: A JWT containing the wallet address to be linked
  * 
  * @returns {Promise<Response>} A response with:
@@ -26,7 +24,6 @@ type LinkWalletRequest = {
  * // Request
  * POST /auth/link-wallet
  * {
- *   "uid": "user-123",
  *   "temporary_token": "jwt.token.here"
  * }
  * 
@@ -61,7 +58,11 @@ export async function linkWallet(req: Request): Promise<Response> {
 		})
 	}
 
-	const { uid, temporary_token } = body
+	const sbUserClient = getClient(req)
+	const { data: { user } } = await sbUserClient.auth.getUser()
+	const uid = user?.id
+
+	const { temporary_token } = body
 	
 	if (!temporary_token) {
 		return new Response(JSON.stringify({ success: false, error: 'Missing temporary_token in request body' }), {
@@ -71,10 +72,10 @@ export async function linkWallet(req: Request): Promise<Response> {
 	}
 	
 	// Verify the temporary token and link the wallet to the user's account
-	let claims
+	let siwtClaims
 	try {
 		const secret = Deno.env.get('JWT_SECRET')
-		claims = verifyJWT(temporary_token, secret)
+		siwtClaims = verifyJWT(temporary_token, secret)
 	} catch (error) {
 		return new Response(JSON.stringify({ success: false, error: 'Invalid or expired temporary_token' }), {
 			headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -83,11 +84,11 @@ export async function linkWallet(req: Request): Promise<Response> {
 	}
 	
 	// Initialize Supabase client with service role key for admin actions
-	const supabase = getServiceRoleClient()
+	const serviceRoleSbClient = getServiceRoleClient()
 
 	// Add wallet address to user's metadata
-	const address = claims.wallet_address
-	const { data, error } = await supabase.auth.admin.updateUserById(uid, {
+	const address = siwtClaims.wallet_address
+	const { data, error } = await serviceRoleSbClient.auth.admin.updateUserById(uid!, {
 		user_metadata: { wallet_address: address }
 	})
 	
