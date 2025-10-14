@@ -1,6 +1,7 @@
 {
   "imports": {
     "@supabase/supabase-js": "jsr:@supabase/supabase-js@^2",
+    "@taquito/utils": "npm:@taquito/utils@^23.0.0",
     "crypto": "node:crypto",
     "jsonwebtoken": "npm:jsonwebtoken@^9.0.2",
     "zod": "npm:zod@^3.24.2"
