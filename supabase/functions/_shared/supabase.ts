@@ -21,13 +21,22 @@ export function getServiceRoleClient() {
  * Creates and returns a standard Supabase client with the provided JWT token.
  * This client respects Row Level Security (RLS) policies.
  * 
- * @param {string} [token] - Optional JWT token for authentication
+ * @param {Request} req - HTTP request containing JWT token for authentication
  * @returns {SupabaseClient} A Supabase client instance
  * @throws {Error} If SUPABASE_URL environment variable is not set
  */
-export function getClient(token?: string) {
+export function getClient(req: Request) {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   if (!supabaseUrl) throw new Error('Missing SUPABASE_URL environment variable')
+
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+  if (!supabaseAnonKey) throw new Error('Missing SUPABASE_ANON_KEY environment variable')
   
-  return createClient(supabaseUrl, token || '')
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: {
+        Authorization: req.headers.get('Authorization')!
+      }
+    }
+  })
 }
