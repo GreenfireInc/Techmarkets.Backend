@@ -18,11 +18,12 @@
  * - Proper error handling and logging
  */
 
-import { getClient } from '../_shared/supabase.ts'
+import { getServiceRoleClient } from '../_shared/supabase.ts'
 import { corsHeaders } from '../_shared/cors.ts'
 import { verify } from './@siwt/sdk/index.esm.js'
 import { sign as signJWT } from 'jsonwebtoken'
 import { AuthResponseData, NewSiwtUserData } from './types/index.d.ts'
+import { getPkhfromPk } from '@taquito/utils'
 
 /**
  * Handles wallet authentication by verifying signed challenges.
@@ -63,16 +64,15 @@ export async function handleAuthenticateWallet(req: Request) {
   }
 
   // Extract authentication data from request body
-  const { address, challenge, pubkey, signature } = body
+  const { challenge, pubkey, signature } = body
+  const address = getPkhfromPk(pubkey)
   const messagePayload = challenge.message.payload
   
   // Get nonce from challenge for validation
   const nonce = challenge.nonce
   
   // Initialize Supabase client with authorization header
-  const authHeader = req.headers.get('Authorization')!
-  const token = authHeader.replace('Bearer ', '')
-  const supabase = getClient(token)
+  const supabase = getServiceRoleClient()
   
   // Validate nonce to prevent replay attacks
   // This ensures the challenge hasn't been used before and isn't expired
@@ -104,8 +104,8 @@ export async function handleAuthenticateWallet(req: Request) {
   }
 
   // Check if user already exists in the database
-  let profile = await getProfileByWalletAddress(supabase, address)
-  if (!profile) {
+  let user = await getUserByWalletAddress(supabase, address)
+  if (!user) {
     // New user flow: Generate temporary token for account creation
     const temporaryToken = await generateTemporaryToken(address)
     const newUserResponse: AuthResponseData = {
@@ -124,42 +124,30 @@ export async function handleAuthenticateWallet(req: Request) {
   }
 
   // Return existingUserResponse
-  // WIP
-  // const { data: sessionData, error } = await supabase.auth.admin.generateLink({
-  //   type: 'magiclink',
-  //   email: profile.email,
-  //   options: {
-  //     redirectTo: `${Deno.env.get('FRONTEND_URL')}/dashboard`
-  //   }
-  // })
-  // if (error) throw error
+  const clientUrl = getClientUrlFromHeaders(req)
+  const { data: sessionData, error } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email: user.email,
+    options: {
+      redirectTo: `${clientUrl.origin}/auth/callback?type=existing_siwt_user`
+    }
+  })
 
-  // const existingUserResponse = {
-  //   success: true,
-  //   user_exists: true,
-  //   data: {
-  //     type: 'existing_user',
-  //     user: {
-  //       id: existingUser.data.id,
-  //       email: existingUser.data.email,
-  //       wallet_address: existingUser.data.wallet_address,
-  //       profile: {
-  //         username: existingUser.data.username,
-  //         display_name: existingUser.data.display_name,
-  //         avatar_url: existingUser.data.avatar_url,
-  //         bio: existingUser.data.bio
-  //       },
-  //       created_at: existingUser.data.created_at,
-  //       updated_at: existingUser.data.updated_at
-  //     },
-  //     session: {
-  //       access_token: sessionData.properties.access_token,
-  //       refresh_token: sessionData.properties.refresh_token,
-  //       expires_at: sessionData.properties.expires_at,
-  //       token_type: 'bearer'
-  //     }
-  //   }
-  // }
+  if (error) throw error
+
+  const existingUserResponse: AuthResponseData = {
+    success: true,
+    user_exists: true,
+    data: {
+      type: 'existing_siwt_user',
+      action_link: sessionData.properties.action_link
+    }
+  }
+
+  return new Response(JSON.stringify(existingUserResponse), {
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    status: 200
+  })
 }
 
 /**
@@ -248,15 +236,19 @@ async function validateNonce(supabase: any, address: string, providedNonce: stri
  * @param address - Wallet address to search for
  * @returns User profile object or null if not found
  */
-async function getProfileByWalletAddress(supabase: any, address: string) {
+async function getUserByWalletAddress(supabase: any, address: string) {
   const { data: existingProfile, error } = await supabase
-    .from('profiles')
+    .from('siwt_users')
     .select('*')
     .eq('wallet_address', address)
 
   if (error) {
     console.error('Error getting profile by address:', error)
     throw error
+  }
+
+  if (!existingProfile[0] || !existingProfile[0].wallet_address) {
+    return null
   }
 
   return existingProfile[0]
@@ -287,4 +279,23 @@ async function generateTemporaryToken(address: string) {
   // Sign and return the JWT token
   const token = signJWT(payload, secret, options)
   return token
+}
+
+/**
+ * Extracts the client URL from request headers for domain validation.
+ * This helps with development and production environments by dynamically
+ * determining the correct origin for the challenge message.
+ * 
+ * @param req - HTTP request object
+ * @returns URL object representing the client origin
+ */
+function getClientUrlFromHeaders(req: Request): URL {
+  // Try to get origin from CORS headers first, then referer
+  const origin = req.headers.get('Origin') || req.headers.get('Referer') || ''
+  try {
+    return new URL(origin);
+  } catch {
+    // Fallback to environment variable or localhost for development
+    return new URL(Deno.env.get('PUBLIC_SITE_URL') || 'http://localhost:8080');
+  }
 }
