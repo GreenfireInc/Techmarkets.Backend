@@ -18,7 +18,7 @@
  * - Proper client URL extraction for domain validation
  */
 
-import { getClient } from "../_shared/supabase.ts"
+import { getServiceRoleClient } from "../_shared/supabase.ts"
 import { corsHeaders } from '../_shared/cors.ts'
 import { createMessagePayload } from './@siwt/sdk/index.esm.js'
 import crypto from 'crypto'
@@ -68,9 +68,7 @@ export async function handleChallenge(req: Request) {
   const expirationTime = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
 
   // Initialize Supabase client and store nonce in database
-  const authHeader = req.headers.get('Authorization')!
-  const token = authHeader.replace('Bearer ', '')
-  const supabase = getClient(token)
+  const supabase = getServiceRoleClient()
 
   // Store nonce in database to prevent replay attacks
   try {
