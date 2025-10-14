@@ -53,7 +53,6 @@ Verifies the signed challenge and authenticates the user.
 **Request**:
 ```json
 {
-  "address": "tz1abc123...",
   "challenge": {
     "message": {
       "payload": "TechMarkets wants you to sign..."
@@ -85,18 +84,7 @@ Verifies the signed challenge and authenticates the user.
   "user_exists": true,
   "data": {
     "type": "existing_user",
-    "user": {
-      "id": "uuid",
-      "wallet_address": "tz1abc123...",
-      "profile": {
-        // UserProfile
-      }
-    },
-    "session": {
-      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-      "expires_at": 1704070800,
-      "token_type": "bearer"
+    "action_link": "https://ltsvdxsfvesbwdvjfeon.supabase.co/auth/v1/verify?token=467c3b4203..."
     }
   }
 }

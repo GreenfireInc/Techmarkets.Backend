@@ -15,8 +15,6 @@ export interface SiwtRequestParams {
   pubkey: string;
   /** Cryptographic signature of the challenge message */
   signature: string;
-  /** Tezos wallet address */
-  address: string;
 }
 
 /**
@@ -57,29 +55,9 @@ export interface AuthResponseData extends ResponseData {
  */
 interface ExistingUserData {
   /** Type identifier for existing user flow */
-  type: 'existing_user';
+  type: 'existing_siwt_user';
   /** Complete user information */
-  user: {
-    /** Unique user identifier */
-    id: string;
-    /** User's email address (optional) */
-    email?: string;
-    /** Tezos wallet address */
-    wallet_address?: string;
-    /** User profile information */
-    profile: UserProfile;
-  };
-  /** Authentication session tokens */
-  session: {
-    /** JWT access token for API requests */
-    access_token: string;
-    /** Token used to refresh the access token */
-    refresh_token: string;
-    /** Unix timestamp when tokens expire */
-    expires_at: number;
-  };
-  /** Available authentication methods for this user */
-  auth_methods: string[]; // e.g., ['wallet', 'email', 'google']
+  action_link: string;
 }
 
 /**
@@ -93,55 +71,4 @@ interface NewSiwtUserData {
   temporary_token: string;
   /** Unix timestamp when temporary token expires */
   expires_at: number;
-}
-
-/**
- * User profile information structure
- * Mirrors the public.profiles table schema from @20250916032755_profiles.sql
- */
-interface UserProfile {
-  /** User type: 'buyer', 'seller', or 'admin' */
-  user_type?: string;
-  /** Tezos wallet address (unique) */
-  wallet_address?: string;
-  /** Whether the user is Google verified */
-  google_verified?: boolean;
-  /** Whether the user is seller verified */
-  seller_verified?: boolean;
-  /** First name */
-  firstname?: string;
-  /** Last name */
-  lastname?: string;
-  /** Street address */
-  address?: string;
-  /** City */
-  city?: string;
-  /** State */
-  state?: string;
-  /** Country */
-  country?: string;
-  /** Zip/postal code */
-  zipcode?: string;
-  /** Instagram handle */
-  instagram?: string;
-  /** Twitter handle */
-  twitter?: string;
-  /** LinkedIn profile */
-  linkedin?: string;
-  /** Personal or business website */
-  website?: string;
-  /** LUNC wallet address */
-  lunc_address?: string;
-  /** XTZ (Tezos) wallet address */
-  xtz_address?: string;
-  /** what3words geolocation */
-  what3words?: string;
-  /** Google Plus Code geolocation */
-  pluscode?: string;
-  /** URL to user's profile image */
-  profile_image_url?: string;
-  /** Timestamp when profile was created (ISO string) */
-  created_at?: string;
-  /** Timestamp when profile was last updated (ISO string) */
-  updated_at?: string;
 }
